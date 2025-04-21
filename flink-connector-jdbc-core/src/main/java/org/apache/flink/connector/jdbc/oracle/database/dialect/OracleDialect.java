@@ -23,17 +23,17 @@ import org.apache.flink.connector.jdbc.core.database.dialect.AbstractDialect;
 import org.apache.flink.connector.jdbc.core.database.dialect.JdbcDialectConverter;
 import org.apache.flink.table.types.logical.LogicalTypeRoot;
 import org.apache.flink.table.types.logical.RowType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.Optional;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
-/** JDBC dialect for Oracle. */
+/**
+ * JDBC dialect for Oracle.
+ */
 @Internal
 public class OracleDialect extends AbstractDialect {
 
@@ -53,6 +53,8 @@ public class OracleDialect extends AbstractDialect {
     private static String delOpCol;
     private static final String DEL_OP_VAL_CONFIG_KEY = "del.op.val";
     private static String delOpVal;
+
+    private static final Logger logger = LoggerFactory.getLogger(OracleDialect.class);
 
     @Override
     public JdbcDialectConverter getRowConverter(RowType rowType) {
@@ -80,6 +82,7 @@ public class OracleDialect extends AbstractDialect {
     }
 
     private static void readConfigFile() throws FileNotFoundException {
+        logger.info("Read config file: {}", CONFIG_FILE);
         File configFile = new File(CONFIG_FILE);
         Scanner scanner = new Scanner(configFile);
         while (scanner.hasNextLine()) {
@@ -87,6 +90,7 @@ public class OracleDialect extends AbstractDialect {
             switch (configEntry[0].trim()) {
                 case DEL_OP_COL_CONFIG_KEY:
                     delOpCol = configEntry[1].trim();
+                    logger.info("DEL op column: {}", delOpCol);
                     break;
                 case DEL_OP_VAL_CONFIG_KEY:
                     delOpVal = configEntry[1].trim();
@@ -125,7 +129,8 @@ public class OracleDialect extends AbstractDialect {
                         .map(
                                 f -> {
                                     if (finalProcessDelOp) {
-                                        return new StringBuilder()
+                                        StringBuilder builder = new StringBuilder();
+                                        builder
                                                 .append("t.")
                                                 .append(quoteIdentifier(f))
                                                 .append("=")
@@ -136,14 +141,18 @@ public class OracleDialect extends AbstractDialect {
                                                 .append("'")
                                                 .append(delOpVal)
                                                 .append("')")
-                                                .append(" THEN ")
-                                                .append("t.")
-                                                .append(quoteIdentifier(f))
+                                                .append(" THEN ");
+                                        if (f.equalsIgnoreCase(delOpCol)) {
+                                            builder.append("s.");
+                                        } else {
+                                            builder.append("t.");
+                                        }
+                                        builder.append(quoteIdentifier(f))
                                                 .append(" ELSE ")
                                                 .append("s.")
                                                 .append(quoteIdentifier(f))
-                                                .append(" END")
-                                                .toString();
+                                                .append(" END");
+                                        return builder.toString();
                                     } else {
                                         return "t."
                                                 + quoteIdentifier(f)
@@ -184,7 +193,7 @@ public class OracleDialect extends AbstractDialect {
                         + " VALUES ("
                         + valuesClause
                         + ")";
-
+        logger.info("Sink statement: {}", mergeQuery);
         return Optional.of(mergeQuery);
     }
 
